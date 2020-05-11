@@ -89,12 +89,10 @@ module NewAddressBookApp =
         | Some Menu.CreateNew -> createEntry
         | Some Menu.ExitApp -> constant None
 
+let rec iterate (step: 'a -> 'a option) (a: 'a) =
+    step a |> Option.bind (iterate step)
+
 [<EntryPoint>]
 let main _ =
-    let rec programLoop addressBook =
-        match addressBook with
-        | None -> ()
-        | Some entries -> entries |> NewAddressBookApp.runMenu() |> programLoop
-
-    programLoop (Some [])
+    iterate (fun entries -> NewAddressBookApp.runMenu() entries) [] |> ignore
     0 // return an integer exit code

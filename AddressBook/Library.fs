@@ -97,8 +97,90 @@ module Person =
                                     LastName = lastName
                                     Age = age
                                 })
-    
-    
+
+    // DT: using bind
+    let create' firstName lastName age =
+        validateFirstName firstName |> Result.bind (fun fname ->
+            validateLastName lastName |> Result.bind (fun lname ->
+                validateAge age |> Result.bind (fun a ->
+                    Ok (PersonalContact {
+                            FirstName = fname 
+                            LastName  = lname
+                            Age = age
+                    })
+                )
+            )
+        )
+
+    // DT: using applicative and hieroglyphics
+    let private (<*>) (f : Result<'a -> 'b, 'e>) (a: Result<'a, 'e>) : Result<'b, 'e> =
+        Result.bind (fun f' ->
+            Result.map f' a
+        ) f
+
+    let private (<!>) = Result.map // <$> in Haskell
+
+    let create'' firstName lastName age =
+        let mkPerson f l a = PersonalContact { FirstName = f; LastName = l; Age = a }
+        mkPerson <!> validateFirstName firstName <*> validateLastName lastName <*> validateAge age
+
+    // DT: using computation expression
+    type ResultBuilder() = // based on https://fsharpforfunandprofit.com/posts/computation-expressions-wrapper-types/#another-example
+        member this.Bind(m, f) = 
+            match m with
+            | Error e -> Error e
+            | Ok a -> f a
+        member this.Return(x) = Ok x
+
+    let result = ResultBuilder()
+
+    let create''' firstName lastName age  : Result<Contact, string> =
+        result {
+            let! fname = validateFirstName firstName
+            let! lname = validateLastName lastName
+            let! a = validateAge age
+            return PersonalContact { FirstName = fname; LastName = lname; Age = age }
+        }
+
+    // DT: using Validation
+    type Validation<'a, 'e> =
+        | Valid of 'a
+        | Invalid of 'e list
+
+    // see https://hackage.haskell.org/package/validation
+    module Validation =
+
+        let map (f : 'a -> 'b) (a : Validation<'a, 'e>) =
+            match a with
+            | Valid a' -> Valid (f a')
+            | Invalid e -> Invalid e
+
+        let apply (f : Validation<'a -> 'b, 'e>) (a : Validation<'a, 'e>) : Validation<'b, 'e> =
+            match f with
+            | Valid f' -> map f' a
+            | Invalid e ->
+                match a with
+                | Valid _ -> Invalid e
+                | Invalid e' -> Invalid (e @ e')    // @ = List.append
+
+    // This will work nicely with computation expressions as of F# 5
+    // https://devblogs.microsoft.com/dotnet/announcing-f-5-preview-1/ (search for "Applicative")
+    // I need to look into this more, but for now will just use hieroglyphics:
+
+    let create'''' firstName lastName age =
+        let (<*>) f a = Validation.apply
+        let (<!>) = Validation.map
+        let toValidation (r: 'a -> Result<'a, 'e>) : ('a -> Validation<'a, 'e>) = fun a ->
+            match r a with
+            | Ok x -> Valid x
+            | Error e -> Invalid [e]
+
+        let mkPerson f l a = PersonalContact { FirstName = f; LastName = l; Age = a }
+        mkPerson
+            <!> toValidation validateFirstName firstName
+            <*> toValidation validateLastName lastName
+            <*> toValidation validateAge age
+
 module AddressBook =
     open Person
     

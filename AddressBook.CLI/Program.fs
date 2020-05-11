@@ -36,69 +36,65 @@ Enter your selection: "
         printfn "\n"
         validateChoice key
 
+module NewAddressBookApp =
+    open AddressBook
+    type AppResult = AddressBook option
 
-module CreateContactWorkflow =
-    let execute addressBook onComplete =
+    type AppCommand = AddressBook -> AppResult
+
+    let sortEntries : AppCommand = fun addressBook ->
+        let validateChoice (choice:ConsoleKeyInfo) =
+            match (string choice.KeyChar).ToUpperInvariant () with
+                | "A" -> Some Ascending
+                | "D" -> Some Descending
+                | _ -> None
+        
+        printf "What order? (A)scending or (D)escending? "
+        Console.ReadKey ()
+        |> validateChoice
+        |> Option.map (sort addressBook)
+        |> Option.orElse (Some addressBook)
+
+    let listEntries : AppCommand = fun addressBook ->
+        let allEntries addressBook =
+            addressBook
+            |> List.map (function
+                | PersonalContact c -> printContact c)
+            |> String.concat "\n"
+        
+        match List.length addressBook with
+        | 0 -> printfn "There are no entries in the address book\n"
+        | _ -> printfn "All entries in the address book:\n%s\n" <| allEntries addressBook
+        Some addressBook
+
+    let createEntry : AppCommand = fun addressBook ->
         printf "Enter First Name: " 
         let firstNameString = Console.ReadLine ()
         printf "Enter Last Name: "
         let lastNameString = Console.ReadLine ()
-        
+
         match create firstNameString lastNameString with
-            | Ok c ->
-                AddressBook.addToAddressBook addressBook c
-                |> onComplete
-            | Error m ->
-                printfn "%s" m
-                onComplete addressBook
+        | Ok c -> addToAddressBook addressBook c |> Some
+        | Error m ->
+            printfn "%s" m
+            Some addressBook
 
+    let private constant a _ = a
 
-module ListAllContactsWorkflow =
-    let private allEntries addressBook =
-        addressBook
-        |> List.map (function
-            | PersonalContact c -> printContact c)
-        |> String.concat "\n"
-    
-    let execute addressBook onComplete =
-        match List.length addressBook with
-            | 0 -> printfn "There are no entries in the address book\n"
-            | _ -> printfn "All entries in the address book:\n%s\n" <| allEntries addressBook
-        onComplete ()
-
-module SortContactsWorkflow =
-    let private validateChoice (choice:ConsoleKeyInfo) =
-        match (string choice.KeyChar).ToUpperInvariant () with
-            | "A" -> Some Ascending
-            | "D" -> Some Descending
-            | _ -> None
-        
-    let execute addressBook onComplete =
-        printf "What order? (A)scending or (D)escending? "
-        match Console.ReadKey () |> validateChoice with
-            | Some Ascending -> SortAddressBook.sort addressBook Ascending
-            | Some Descending -> SortAddressBook.sort addressBook Descending
-            | None -> addressBook
-        |> onComplete
-        
+    let rec runMenu() : AppCommand = 
+        match Menu.getMenuOption() with
+        | None -> runMenu()
+        | Some Menu.ListAll -> listEntries
+        | Some Menu.SortAddressBook -> sortEntries
+        | Some Menu.CreateNew -> createEntry
+        | Some Menu.ExitApp -> constant None
 
 [<EntryPoint>]
 let main _ =
-    let rec programLoop addressBook exitCondition =
-        let startAgain = (fun () -> programLoop addressBook exitCondition)
-        let updateAndStartAgain = (fun newBook -> programLoop newBook exitCondition)
-        
-        if exitCondition then () else
-            let selection = Menu.getMenuOption ()
-            match selection with
-                | None -> programLoop addressBook exitCondition
-                | Some Menu.ListAll -> ListAllContactsWorkflow.execute addressBook startAgain
-                | Some Menu.SortAddressBook -> SortContactsWorkflow.execute addressBook updateAndStartAgain
-                | Some Menu.CreateNew -> CreateContactWorkflow.execute addressBook updateAndStartAgain
-                | Some Menu.ExitApp -> ()
-        ()
-        
-    let (addressBook: AddressBook.AddressBook) = []
-    programLoop addressBook false
-    
+    let rec programLoop addressBook =
+        match addressBook with
+        | None -> ()
+        | Some entries -> entries |> NewAddressBookApp.runMenu() |> programLoop
+
+    programLoop (Some [])
     0 // return an integer exit code

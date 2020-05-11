@@ -1,5 +1,7 @@
 ﻿namespace AddressBook
 
+//module Result =
+
 module Person =
     type Person = {
         FirstName: string
@@ -27,23 +29,27 @@ module Person =
         | 1 | 2 -> Error "Name is too short"
         | x when x = 6 -> Error "We dont accept people with 6 letter names"
         | _ -> Ok name
-        
-    let validateFirstName name =
-        name
-        |> isNotBlank
-        |> Result.bind hasTitleCase
+
+    let flip f a b = f b a
+    let private (>>=) a f = Result.bind f a
+    let (>=>) f g x = f x >>= g
+
+    let validateFirstName =
+        isNotBlank >=> hasTitleCase
     
     let validateLastName name =
-        name
-        |> isNotBlank
-        |> Result.bind hasTitleCase
-        |> Result.bind meetsSomeAribtraryLengthCriteria
+        isNotBlank name 
+        >>= hasTitleCase
+        >>= meetsSomeAribtraryLengthCriteria
     
     let validateName firstName lastName =
         validateFirstName firstName
         |> Result.bind validateLastName
     
     let create firstName lastName =
+        validateName firstName lastName
+        |> Result.map (fun _ -> PersonalContact { FirstName = firstName; LastName = lastName })
+        (*
         let validationResult = validateName firstName lastName
         match validationResult with
             | Error m -> Error m
@@ -51,6 +57,7 @@ module Person =
                     FirstName = firstName
                     LastName = lastName
                 })
+                *)
     
     
 module AddressBook =
@@ -68,13 +75,14 @@ module SortAddressBook =
     type SortOrder =
         | Ascending
         | Descending
+        with
+            member x.sortList list =
+                match x with
+                | Ascending -> List.sort list
+                | Descending -> List.sortDescending list
     
     let sort (addressBook:AddressBook) (order: SortOrder) =
-        match order with
-            | Ascending -> List.sort addressBook
-            | Descending -> List.sortDescending addressBook
-        
-    
+        order.sortList addressBook
 
 module Test =
     open Person
